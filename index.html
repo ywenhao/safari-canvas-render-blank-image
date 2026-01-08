@@ -7,7 +7,8 @@
       body {
         padding: 20px;
       }
-      canvas {
+      canvas,
+      img {
         border: 1px solid #ccc;
         margin: 10px 0;
       }
@@ -25,11 +26,13 @@
 
     <!-- 1. 仅用 onload 绘制（Safari 会白屏） -->
     <div>Case 1: 仅 onload 绘制（Safari 空白，Chrome 正常）</div>
-    <canvas id="canvas1" width="400" height="300"></canvas>
+    <!-- <canvas id="canvas1" width="400" height="300"></canvas> -->
+    <img alt="" id="img1" />
 
     <!-- 2. 添加 0ms 延迟绘制（Safari 正常） -->
     <div>Case 2: onload + setTimeout(0) 绘制（Safari/Chrome 都正常）</div>
-    <canvas id="canvas2" width="400" height="300"></canvas>
+    <!-- <canvas id="canvas2" width="400" height="300"></canvas> -->
+    <img alt="" id="img2" />
 
     <!-- 日志区：打印关键时间戳 -->
     <div class="log" id="log"></div>
@@ -67,7 +70,11 @@
       }
 
       // 步骤2：封装绘制函数（带/不带延迟）
-      const drawSVGToCanvas = async (canvas, withDelay = false) => {
+      const drawSVGToCanvas = async (canvasId, imgPreview, withDelay = false) => {
+        const canvas = document.createElement('canvas')
+        canvas.id = canvasId
+        canvas.width = 400
+        canvas.height = 300
         /**
          * @type {CanvasRenderingContext2D}
          */
@@ -105,6 +112,8 @@
             log.innerHTML += `[${canvas.id}] 绘制后中心像素: ${pixel} → ${
               isBlank ? '空白（仅背景）' : '正常（含图片）'
             }\n`
+
+            imgPreview.src = canvas.toDataURL()
           }
 
           if (withDelay) {
@@ -129,8 +138,8 @@
       }
 
       // 执行验证
-      drawSVGToCanvas(document.getElementById('canvas1'), false) // Case1：无延迟
-      drawSVGToCanvas(document.getElementById('canvas2'), true) // Case2：加延迟
+      drawSVGToCanvas('canvas1', document.getElementById('img1'), false) // Case1：无延迟
+      drawSVGToCanvas('canvas2', document.getElementById('img2'), true) // Case2：加延迟
     </script>
   </body>
 </html>
