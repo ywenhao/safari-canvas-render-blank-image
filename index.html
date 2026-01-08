@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Safari Canvas 渲染差异验证</title>
+    <style>
+      body {
+        padding: 20px;
+      }
+      canvas {
+        border: 1px solid #ccc;
+        margin: 10px 0;
+      }
+      .log {
+        margin: 10px 0;
+        padding: 10px;
+        background: #f5f5f5;
+        font-family: monospace;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <h3>验证：Safari onload 触发时内嵌图片未就绪</h3>
+
+    <!-- 1. 仅用 onload 绘制（Safari 会白屏） -->
+    <div>Case 1: 仅 onload 绘制（Safari 空白，Chrome 正常）</div>
+    <canvas id="canvas1" width="400" height="300"></canvas>
+
+    <!-- 2. 添加 0ms 延迟绘制（Safari 正常） -->
+    <div>Case 2: onload + setTimeout(0) 绘制（Safari/Chrome 都正常）</div>
+    <canvas id="canvas2" width="400" height="300"></canvas>
+
+    <!-- 日志区：打印关键时间戳 -->
+    <div class="log" id="log"></div>
+
+    <script>
+      // 步骤1：创建包含内嵌图片的 SVG 字符串（用公开图片地址）
+      const createSVGWithImage = async () => {
+        const url = 'https://picsum.photos/300/200?random=1'
+
+        const res = await fetch(url)
+        const blob = await res.blob()
+        const base64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onerror = reject
+          reader.onloadend = () => {
+            try {
+              resolve(reader.result)
+            } catch (error) {
+              reject(error)
+            }
+          }
+
+          reader.readAsDataURL(blob)
+        })
+
+        return `<svg width="400" height="300" xmlns="http://www.w3.org/2000/svg">
+          <rect x="0" y="0" width="400" height="300" fill="#f0f0f0" />
+          <image
+            x="50" y="50" width="300" height="200"
+            href="${base64}"
+            crossOrigin="anonymous"
+          />
+          <text x="200" y="280" text-anchor="middle" font-size="14">内嵌图片测试</text>
+        </svg>`
+      }
+
+      // 步骤2：封装绘制函数（带/不带延迟）
+      const drawSVGToCanvas = async (canvas, withDelay = false) => {
+        /**
+         * @type {CanvasRenderingContext2D}
+         */
+        const ctx = canvas.getContext('2d')
+        const svgString = await createSVGWithImage()
+        const log = document.getElementById('log')
+
+        const img = new Image()
+        img.crossOrigin = 'anonymous'
+
+        // 记录时间戳
+        const startTime = Date.now()
+        log.innerHTML += `[${canvas.id}] 开始加载 SVG: ${startTime}ms\n`
+
+        img.onload = () => {
+          const onloadTime = Date.now()
+          log.innerHTML += `[${canvas.id}] SVG onload 触发: ${onloadTime}ms (耗时: ${
+            onloadTime - startTime
+          }ms)\n`
+
+          // 核心对比：是否添加延迟
+          const draw = () => {
+            const drawTime = Date.now()
+            log.innerHTML += `[${canvas.id}] 执行 drawImage: ${drawTime}ms (onload 后耗时: ${
+              drawTime - onloadTime
+            }ms)\n`
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height)
+            ctx.drawImage(img, 0, 0)
+
+            // 验证：检查 Canvas 像素是否空白（Safari Case1 会是全白）
+            const pixel = ctx.getImageData(200, 150, 1, 1).data
+            const isBlank =
+              pixel[0] === 240 && pixel[1] === 240 && pixel[2] === 240 && pixel[3] === 255 // 仅背景色
+            log.innerHTML += `[${canvas.id}] 绘制后中心像素: ${pixel} → ${
+              isBlank ? '空白（仅背景）' : '正常（含图片）'
+            }\n`
+          }
+
+          if (withDelay) {
+            // 添加 0ms 延迟（推入下一个渲染帧）
+            setTimeout(draw, 0)
+          } else {
+            // 无延迟：onload 立即绘制
+            draw()
+          }
+        }
+
+        img.onerror = (err) => {
+          log.innerHTML += `[${canvas.id}] 加载失败: ${err}\n`
+        }
+
+        const div = document.createElement('div')
+        div.innerHTML = svgString
+
+        img.src =
+          'data:image/svg+xml;charset=utf-8,' +
+          encodeURIComponent(new XMLSerializer().serializeToString(div.firstElementChild))
+      }
+
+      // 执行验证
+      drawSVGToCanvas(document.getElementById('canvas1'), false) // Case1：无延迟
+      drawSVGToCanvas(document.getElementById('canvas2'), true) // Case2：加延迟
+    </script>
+  </body>
+</html>
